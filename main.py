@@ -1,103 +1,180 @@
+'''민방위 교육 일정 조회
+출처: https://www.safekorea.go.kr/idsiSFK/neo/sfk/cs/contents/civil_defense/SDIJKM1205.jsp?emgPage=Y&menuSeq=50
+'''
 import requests
-from datetime import datetime, date
+from datetime import date, datetime
 
-# 서울 지역 시군구 코드와 이름 매핑
-REGION = {
-    "3220000": "강남구",
-    "3240000": "강동구",
-    "3080000": "강북구",
-    "3150000": "강서구",
-    "3200000": "관악구",
-    "3040000": "광진구",
-    "3160000": "구로구",
-    "3170000": "금천구",
-    "3100000": "노원구",
-    "3090000": "도봉구",
-    "3050000": "동대문구",
-    "3190000": "동작구",
-    "3130000": "마포구",
-    "3120000": "서대문구",
-    "3210000": "서초구",
-    "3030000": "성동구",
-    "3070000": "성북구",
-    "3230000": "송파구",
-    "3140000": "양천구",
-    "3180000": "영등포구",
-    "3020000": "용산구",
-    "3110000": "은평구",
-    "3000000": "종로구",
-    "3010000": "중구",
-    "3060000": "중랑구",
-}
 
-DAY_OF_WEEK_KR = ["월", "화", "수", "목", "금", "토", "일"]
+# 시도 목록
+SIDO_LIST = [
+    ("서울특별시", "6110000"),
+    ("부산광역시", "6260000"),
+    ("대구광역시", "6270000"),
+    ("인천광역시", "6280000"),
+    ("광주광역시", "6290000"),
+    ("대전광역시", "6300000"),
+    ("울산광역시", "6310000"),
+    ("세종특별자치시", "5690000"),
+    ("경기도", "6410000"),
+    ("강원특별자치도", "6530000"),
+    ("충청북도", "6430000"),
+    ("충청남도", "6440000"),
+    ("전북특별자치도", "6540000"),
+    ("전라남도", "6460000"),
+    ("경상북도", "6470000"),
+    ("경상남도", "6480000"),
+    ("제주특별자치도", "6500000"),
+]
 
-for code, name in REGION.items():
-    educations = requests.get(f"https://www.safekorea.go.kr/idsiSFK/neo/ext/json/civilDefense/civilDefEduList/civilDefEduList_{code}.json").json()
-    # {
-    # "EDC_DE": "20250625",
-    # "ROWCNT": 220,
-    # "SGG_CD": "3220000",
-    # "EDC_SE_CD": "10",
-    # "EDC_SE_NM": "기본교육",
-    # "EDCNTR_ADRES": "서울특별시 강남구 대치동 509-2 ",
-    # "EDCNTR_RDNMADR": "서울특별시 강남구 삼성로 154 (대치동)",
-    # "EDC_TGT_SE_CD": "31",
-    # "EDC_TGT_SE_NM": "민방위대 편입 1~2년차 대원",
-    # "EDC_END_TIME": "1800",
-    # "CLNS_LRGE_SE_CD": "1",
-    # "EDCNTR_NM": "논현2동_강남구민회관 대강당(2층 대강당)",
-    # "HDAY_SE": "0",
-    # "EDC_BEGIN_TIME": "1400",
-    # "ORGNM": "서울특별시 강남구 논현2동",
-    # "TELNO": "02-3423-5168",
-    # "EMD_CD": "3220042"
-    # },
+# 시군구 목록 (동적으로 채워짐.)
+SIGUNGU_LIST = None
 
-    # 교육일자 기준으로 오름차순 정렬
-    educations.sort(key=lambda x: x["EDC_DE"])
+# 교육대상 코드 (2년차인경우 31(민방위대 편입 1~2년차대원), 33(민방위대 편입 2년차대원) 모두 조회)
+EDU_TARGET_CODES = ["31"]
 
-    education_final = set()
+# 조회기간 (오늘 ~ 연말)
+START_DATE = date.today()
+END_DATE = date(START_DATE.year, 12, 31)
 
-    # 민방위 2년차 / 금요일 오전 교육만 추출
-    for education in educations:
-        education_date = datetime.strptime(education.get("EDC_DE"), "%Y%m%d").date()
-        if education_date < date.today() or education_date > date(2025, 12, 31):
-            # 교육 일정이 오늘 이전이거나 2025년 12월 31일 이후인 경우 건너뜀. ([오늘, 2025-12-31] 범위 내의 일정만 사용)
+# 교육시간 (0: 평일, 1: 야간, 2: 주말)
+EDU_TIME = "0"
+
+
+def make_req_data(sido_code, sigungu_code, edu_target_code, page_index=1, page_size=0):
+    return {
+        "selectList": {
+            "searchGb":"",
+            "firstIndex":"1",
+            "lastIndex":"1",
+            "pageIndex":str(page_index),
+            "pageSize":str(page_size),
+            "pageUnit":"10",
+            "recordCountPerPage":"10",
+            "sbscrbSttus":"",
+            "searchCondition":"",
+            "search_val":"",
+            "search_key":"",
+            "searchCdKey":"",
+            "parntsBdongCd":"",
+            "emgncContactNtwkSeCd":"2",
+            "orgSeCd":"02",
+            "q_area_cd_3":"",
+            "q_area_cd_2":sigungu_code,
+            "q_area_cd_1":sido_code,
+            "q_strdate":f"{START_DATE:%Y%m%d}",
+            "q_enddate":f"{END_DATE:%Y%m%d}",
+            "q_onefour":"",
+            "hdaySe":EDU_TIME,
+            "edcTgtSeCd":edu_target_code,
+            "cvdpyCpsCode":"",
+            "cvdEduSeCode":"",
+            "edYmd":"",
+            "edSno":"",
+            "searchDate1":f"{START_DATE:%Y%m%d}",
+            "searchDate2":f"{END_DATE:%Y%m%d}",
+            "rdn_code":""
+        }
+    }
+
+
+def convert_edu_list(edu_sch_list, ampm_filter=None):
+    weekday_map = ["월", "화", "수", "목", "금", "토", "일"]
+    result = []
+    seen = set()  # 중복 방지용 (일정+장소 조합 저장)
+
+    for item in edu_sch_list:
+        # 교육 일정이 없는 경우 빈 dict 이므로 건너뜀.
+        if not item:
             continue
 
-        if education.get("HDAY_SE") != "0":
-            # 평일교육이 아닌 경우 건너뜀.
-            continue
+        # 날짜/시간 변환
+        date_obj = datetime.strptime(item["ED_YMD"], "%Y%m%d")
+        weekday = weekday_map[date_obj.weekday()]
 
-        # 31 : 민방위대 편입 1~2년차 대원, 33 : 민방위대 편입 2년차 대원
-        if education.get("EDC_TGT_SE_CD") != "31" and education.get("EDC_TGT_SE_CD") != "33":
-            # 교육대상이 아닌 경우 건너뜀.
-            continue
+        if ampm_filter == "1" and item["edcBeginTime"] >= "1200":
+            continue  # 오전만 필터링
+        elif ampm_filter == "2" and item["edcBeginTime"] < "1200":
+            continue  # 오후만 필터링
 
-        if education.get("EDC_BEGIN_TIME") != "0900":
-            # 오전 교육이 아닌경우 건너뜀.
-            continue
+        schedule = (
+            f"{date_obj:%Y-%m-%d}({weekday}) "
+            f"{item['edcBeginTime'][:2]}:{item['edcBeginTime'][2:]}-"
+            f"{item['edcEndTime'][:2]}:{item['edcEndTime'][2:]}"
+        )
+        place = item["EDU_PLC_BOTTOM"]
 
-        # 요일
-        day_of_week = ["월", "화", "수", "목", "금", "토", "일"][education_date.weekday()]
-        if day_of_week != "금":
-            # 금요일 교육이 아닌경우 건너뜀.
-            continue
+        key = (schedule, place)
+        if key not in seen:  # 중복 제거
+            seen.add(key)
+            result.append({
+                "schedule": schedule,
+                "place": place
+            })
 
-        # 최종후보
-        education_final.add(frozenset({
-            "datetime": f"{education_date.strftime('%Y-%m-%d')}({day_of_week}) {education.get('EDC_BEGIN_TIME')}-{education.get('EDC_END_TIME')}",
-            "location": f"{education.get('EDCNTR_NM').split('_', 1)[1]}",
-            "target": education.get('EDC_TGT_SE_NM')
-        }.items()))
-    
-    if not education_final:
-        # 유효한 교육 일정이 없는 경우 건너뜀.
-        continue
+    return result
 
-    print(f"=== {name} 지역 민방위 교육 일정 ===")
-    for education in education_final:
-        edu = dict(education)
-        print(f"{edu.get('datetime')} / {edu.get('location')} / {edu.get('target')}")
+
+def fetch_schedules(sido_code, sigungu_code, edu_target_code, ampm_filter=None):
+    page = 1
+    page_size = None
+
+    schedules = []
+    while page_size is None or page <= page_size:
+        req_data = make_req_data(sido_code, sigungu_code, edu_target_code, page, page_size)
+        response = requests.post("https://www.safekorea.go.kr/idsiSFK/sfk/cs/cvi/edtr/selectEduSchList2.do", json=req_data).json()
+        schedules.extend(convert_edu_list(response["eduShcList"], ampm_filter))
+        page_size = response["rtnResult"]["pageSize"]
+        page += 1
+
+    return schedules
+
+
+if __name__ == "__main__":
+    print("### 민방위(1~2년차) 평일(주간) 집합교육 일정 조회 ###", end="\n\n\n")
+
+    # 시도 선택
+    for i, (name, _) in enumerate(SIDO_LIST, start=1):
+        print(f"{i:2d}. {name}")
+    selected_index = input(f"\n## 시도를 선택해주세요 (예. {SIDO_LIST[0][0]} -> 1 입력): ")
     print("\n")
+    selected_sido = SIDO_LIST[int(selected_index) - 1]
+
+    # 시군구 목록 조회
+    response = requests.get(f"https://www.safekorea.go.kr/idsiSFK/neo/ext/json/arcd/hd/{selected_sido[1]}/hd_sgg.json").json()
+    SIGUNGU_LIST = [(item["ORG_NM"], item["ORG_CD"]) for item in response]
+
+    # 민방위 연차 선택
+    selected_year = input("## 민방위대 편입연차 선택 (1: 1년차, 2: 2년차): ")
+    if selected_year == "2":
+        EDU_TARGET_CODES.append("33")
+    else:
+        selected_year = "1"
+    print("\n")
+
+    # 교육시간 선택
+    ampm_filter = input("## 교육시간 선택 (1: 오전, 2: 오후, 3: 전체): ")
+    ampm_msg = ""
+    if ampm_filter == "1":
+        ampm_msg = "오전 "
+    elif ampm_filter == "2":
+        ampm_msg = "오후 "
+    else:
+        ampm_filter = None
+        ampm_msg = ""
+    print("\n")
+
+    print(f"\n### {selected_sido[0]} 민방위({selected_year}년차) {ampm_msg}집합교육 일정 조회 (조회기간: {START_DATE:%Y-%m-%d} ~ {END_DATE:%Y-%m-%d}) ###", end="\n\n")
+    for (sigungu_name, sigungu_code) in SIGUNGU_LIST:
+        schedules = []
+        for edu_target_code in EDU_TARGET_CODES:
+            response = fetch_schedules(selected_sido[1], sigungu_code, edu_target_code, ampm_filter)
+            schedules.extend(response)
+        
+        if schedules:
+            for schedule in schedules:
+                print(f"- [{sigungu_name}] {schedule['schedule']} @ {schedule['place']}")
+        else:
+            print(f"- [{sigungu_name}] 교육일정 없음.")
+        print("\n")
+    
+    print("### 조회 완료 ###")
